@@ -28,9 +28,6 @@ static const char *help_msg_f[] = {
 	"fb", " [addr] [flag*]", "move flags matching 'flag' to relative addr",
 	"fc", "[?][name] [color]", "set color for given flag",
 	"fC", " [name] [cmt]", "set comment for given flag",
-	"fd", "[?] addr", "return flag+delta",
-	"fe-", "", "resets the enumerator counter",
-	"fe", " [name]", "create flag name.#num# enumerated flag. See fe?",
 	"ff", " ([glob])", "distance in bytes to reach the next flag (see sn/sp)",
 	"fi", " [size] | [from] [to]", "show flags in current block or range",
 	"fg", "[*] ([prefix])", "construct a graph with the flag names",
@@ -42,24 +39,13 @@ static const char *help_msg_f[] = {
 	"fnj", "", "list flags displaying the real name (demangled) in JSON format",
 	"fN", "", "show real name of flag at current address",
 	"fN", " [[name]] [realname]", "set flag real name (if no flag name current seek one is used)",
-	"fo", "", "show fortunes",
 	"fO", " [glob]", "flag as ordinals (sym.* func.* method.*)",
 	//" fc [name] [cmt]  ; set execution command for a specific flag"
 	"fr", " [[old]] [new]", "rename flag (if no new flag current seek one is used)",
 	"fR", "[?] [f] [t] [m]", "relocate all flags matching f&~m 'f'rom, 't'o, 'm'ask",
-	"fs", "[?]+-*", "manage flagspaces",
-	"ft", "[?]*", "flag tags, useful to find all flags matching some words",
 	"fV", "[*-] [nkey] [offset]", "dump/restore visual marks (mK/'K)",
 	"fx", "[d]", "show hexdump (or disasm) of flag:flagsize",
 	"fq", "", "list flags in quiet mode",
-	"fz", "[?][name]", "add named flag zone -name to delete. see fz?[name]",
-	NULL
-};
-
-static const char *help_msg_fc[] = {
-	"Usage: fc", "<flagname> [color]", " # List colors with 'ecs'",
-	"fc", " flagname", "Get current color for given flagname",
-	"fc", " flagname color", "Set color to a flag",
 	NULL
 };
 
@@ -583,14 +569,12 @@ static bool rename_flag_ordinal(RzFlagItem *fi, void *user) {
 	return true;
 }
 
-static void flag_ordinals(RzCore *core, const char *str) {
-	const char *glob = rz_str_trim_head_ro(str);
+static void flag_ordinals(RzCore *core, const char *glob) {
 	char *pfx = strdup(glob);
 	char *p = strchr(pfx, '*');
 	if (p) {
 		*p = 0;
 	}
-
 	struct rename_flag_t u = { .core = core, .pfx = pfx, .count = 0 };
 	rz_flag_foreach_glob(core->flags, glob, rename_flag_ordinal, &u);
 	free(pfx);
@@ -779,14 +763,159 @@ RZ_IPI RzCmdStatus rz_flag_space_stack_list_handler(RzCore *core, int argc, cons
 	return RZ_CMD_STATUS_OK;
 }
 
+RZ_IPI RzCmdStatus rz_flag_remove_handler(RzCore *core, int argc, const char **argv) {
+	ut64 address = rz_num_math(core->num, argv[1]);
+	return bool2status(rz_flag_move(core->flags, core->offset, address));
+}
+
+RZ_IPI RzCmdStatus rz_flag_alias_handler(RzCore *core, int argc, const char **argv) {
+	RzFlagItem *fi = rz_flag_get(core->flags, argv[1]);
+	if (!fi) {
+		fi = rz_flag_set(core->flags, argv[1], core->offset, 1);
+	}
+	if (!fi) {
+		RZ_LOG_ERROR("Cannot find flag '%s'\n", argv[1]);
+		return RZ_CMD_STATUS_ERROR;
+	}
+	rz_flag_item_set_alias(fi, argv[2]);
+	return RZ_CMD_STATUS_OK;
+}
+
+RZ_IPI RzCmdStatus rz_flag_base_handler(RzCore *core, int argc, const char **argv) {
+	if (argc > 2) {
+		RzFlag *f = core->flags;
+		ut64 base = rz_num_math(core->num, argv[1]);
+		rz_flag_foreach_glob(f, argv[2], adjust_offset, &base);
+	} else {
+		core->flags->base = rz_num_math(core->num, argv[1]);
+	}
+	return RZ_CMD_STATUS_OK;
+}
+
+RZ_IPI RzCmdStatus rz_flag_distance_handler(RzCore *core, int argc, const char **argv) {
+	rz_cons_printf("%d\n", flag_to_flag(core, argv[1]));
+	return RZ_CMD_STATUS_OK;
+}
+
+RZ_IPI RzCmdStatus rz_flag_move_handler(RzCore *core, int argc, const char **argv) {
+	ut64 address = rz_num_math(core->num, argv[1]);
+	return bool2status(rz_flag_move(core->flags, core->offset, address));
+}
+
+RZ_IPI RzCmdStatus rz_flag_realname_handler(RzCore *core, int argc, const char **argv) {
+	if (argc < 2) {
+		RzFlagItem *item = rz_flag_get_i(core->flags, core->offset);
+		if (item) {
+			rz_cons_printf("%s\n", item->realname);
+		}
+	} else {
+		RzFlagItem *item = rz_flag_get(core->flags, argv[1]);
+		if (!item && !strncmp(argv[1], "fcn.", 4)) {
+			item = rz_flag_get(core->flags, argv[1] + 4);
+		}
+		if (!item) {
+			RZ_LOG_ERROR("Cannot find flag '%s'\n", argv[1]);
+			return RZ_CMD_STATUS_ERROR;
+		}
+		rz_flag_item_set_realname(item, argv[2]);
+	}
+	return RZ_CMD_STATUS_OK;
+}
+
+RZ_IPI RzCmdStatus rz_flag_list_ascii_handler(RzCore *core, int argc, const char **argv) {
+	if (argc > 1) {
+		flagbars(core, argv[1]);
+	} else {
+		flagbars(core, NULL);
+	}
+	return RZ_CMD_STATUS_OK;
+}
+
+RZ_IPI RzCmdStatus rz_flag_color_handler(RzCore *core, int argc, const char **argv) {
+	RzFlagItem *fi = rz_flag_get(core->flags, argv[1]);
+	if (!fi) {
+		RZ_LOG_ERROR("Cannot find the flag '%s'\n", argv[1]);
+		return RZ_CMD_STATUS_ERROR;
+	}
+	const char *ret = rz_flag_item_set_color(fi, argv[2]);
+	if (ret) {
+		rz_cons_println(ret);
+	}
+	return RZ_CMD_STATUS_OK;
+}
+
+RZ_IPI RzCmdStatus rz_flag_comment_handler(RzCore *core, int argc, const char **argv) {
+	RzFlagItem *item;
+	if (argc > 2) {
+		item = rz_flag_get(core->flags, argv[1]);
+		if (!item) {
+			RZ_LOG_ERROR("Cannot find flag with name '%s'\n", argv[1]);
+			return RZ_CMD_STATUS_ERROR;
+		}
+		if (!strncmp(argv[2], "base64:", 7)) {
+			char *dec = (char *)rz_base64_decode_dyn(argv[2] + 7, -1);
+			if (!dec) {
+				eprintf("Failed to decode base64-encoded string\n");
+				return RZ_CMD_STATUS_ERROR;
+			}
+			rz_flag_item_set_comment(item, dec);
+			free(dec);
+		} else {
+			rz_flag_item_set_comment(item, argv[2]);
+		}
+	} else {
+		item = rz_flag_get_i(core->flags, rz_num_math(core->num, argv[1]));
+		if (item && item->comment) {
+			rz_cons_println(item->comment);
+		} else {
+			RZ_LOG_ERROR("Cannot find the flag\n");
+			return RZ_CMD_STATUS_ERROR;
+		}
+	}
+	return RZ_CMD_STATUS_OK;
+}
+
+RZ_IPI RzCmdStatus rz_flag_ordinals_handler(RzCore *core, int argc, const char **argv) {
+	flag_ordinals(core, argv[1]);
+	return RZ_CMD_STATUS_OK;
+}
+
+RZ_IPI RzCmdStatus rz_flag_rename_handler(RzCore *core, int argc, const char **argv) {
+	RzFlagItem *item = rz_flag_get(core->flags, argv[1]);
+	if (!item && !strncmp(argv[1], "fcn.", 4)) {
+		item = rz_flag_get(core->flags, argv[1] + 4);
+	}
+	if (!item) {
+		RZ_LOG_ERROR("Cannot find matching flag\n");
+		return RZ_CMD_STATUS_ERROR;
+	}
+	if (!rz_flag_rename(core->flags, item, argv[2])) {
+		RZ_LOG_ERROR("Invalid new flag name\n");
+		return RZ_CMD_STATUS_ERROR;
+	}
+	return RZ_CMD_STATUS_OK;
+}
+
+RZ_IPI RzCmdStatus rz_flag_hexdump_handler(RzCore *core, int argc, const char **argv) {
+	char cmd[128];
+	ut64 address = rz_num_math(core->num, argv[1]);
+	RzFlagItem *item = rz_flag_get_i(core->flags, address);
+	if (!item) {
+		RZ_LOG_ERROR("Cannot find flag '%s'\n", argv[1]);
+		return RZ_CMD_STATUS_ERROR;
+	}
+	rz_cons_printf("0x%08" PFMT64x "\n", item->offset);
+	// FIXME: Use the API directly instead of calling the command
+	snprintf(cmd, sizeof(cmd), "px@%" PFMT64d ":%" PFMT64d, item->offset, item->size);
+	rz_core_cmd0(core, cmd);
+	return RZ_CMD_STATUS_OK;
+}
+
 RZ_IPI int rz_cmd_flag(void *data, const char *input) {
-	static int flagenum = 0;
 	RzCore *core = (RzCore *)data;
 	ut64 off = core->offset;
-	char *ptr, *str = NULL;
+	char *str = NULL;
 	RzFlagItem *item;
-	char *name = NULL;
-	st64 base;
 
 	// TODO: off+=cursor
 	if (*input) {
@@ -794,71 +923,6 @@ RZ_IPI int rz_cmd_flag(void *data, const char *input) {
 	}
 rep:
 	switch (*input) {
-	case 'f': // "ff"
-		if (input[1] == 's') { // "ffs"
-			int delta = flag_to_flag(core, input + 2);
-			if (delta > 0) {
-				rz_cons_printf("0x%08" PFMT64x "\n", core->offset + delta);
-			}
-		} else {
-			rz_cons_printf("%d\n", flag_to_flag(core, input + 1));
-		}
-		break;
-	case 'e': // "fe"
-		switch (input[1]) {
-		case ' ':
-			ptr = rz_str_newf("%s.%d", input + 2, flagenum);
-			(void)rz_flag_set(core->flags, ptr, core->offset, 1);
-			flagenum++;
-			free(ptr);
-			break;
-		case '-':
-			flagenum = 0;
-			break;
-		default:
-			eprintf("|Usage: fe[-| name] @@= 1 2 3 4\n");
-			break;
-		}
-		break;
-	case '=': // "f="
-		switch (input[1]) {
-		case ' ':
-			flagbars(core, input + 2);
-			break;
-		case 0:
-			flagbars(core, NULL);
-			break;
-		default:
-		case '?':
-			eprintf("Usage: f= [glob] to grep for matching flag names\n");
-			break;
-		}
-		break;
-	case 'a':
-		if (input[1] == ' ') {
-			RzFlagItem *fi;
-			RZ_FREE(str);
-			str = strdup(input + 2);
-			ptr = strchr(str, '=');
-			if (!ptr)
-				ptr = strchr(str, ' ');
-			if (ptr)
-				*ptr++ = 0;
-			name = (char *)rz_str_trim_head_ro(str);
-			ptr = (char *)rz_str_trim_head_ro(ptr);
-			fi = rz_flag_get(core->flags, name);
-			if (!fi)
-				fi = rz_flag_set(core->flags, name,
-					core->offset, 1);
-			if (fi) {
-				rz_flag_item_set_alias(fi, ptr);
-			} else {
-				eprintf("Cannot find flag '%s'\n", name);
-			}
-		} else {
-			eprintf("Usage: fa flagname flagalias\n");
-		}
-		break;
 	case 'V': // visual marks
 		switch (input[1]) {
 		case '-':
@@ -880,9 +944,6 @@ rep:
 			rz_core_visual_mark_dump(core);
 			break;
 		}
-		break;
-	case 'm': // "fm"
-		rz_flag_move(core->flags, core->offset, rz_num_math(core->num, input + 1));
 		break;
 	case 'R': // "fR"
 		switch (*str) {
@@ -917,32 +978,6 @@ rep:
 					" > fR entry0 `dm~:1[1]`\n");
 			}
 		}
-		}
-		break;
-	case 'b': // "fb"
-		switch (input[1]) {
-		case ' ':
-			free(str);
-			str = strdup(input + 2);
-			ptr = strchr(str, ' ');
-			if (ptr) {
-				RzFlag *f = core->flags;
-				*ptr = 0;
-				base = rz_num_math(core->num, str);
-				rz_flag_foreach_glob(f, ptr + 1, adjust_offset, &base);
-			} else {
-				core->flags->base = rz_num_math(core->num, input + 1);
-			}
-			RZ_FREE(str);
-			break;
-		case '\0':
-			rz_cons_printf("%" PFMT64d " 0x%" PFMT64x "\n",
-				core->flags->base,
-				core->flags->base);
-			break;
-		default:
-			eprintf("Usage: fb [addr] [[flags*]]\n");
-			break;
 		}
 		break;
 	case '+': // "f+'
@@ -1134,36 +1169,6 @@ rep:
 				rz_cons_printf("0x%08" PFMT64x "\n", item->size);
 		}
 		break;
-#if 0
-	case 'd':
-		if (input[1] == ' ') {
-			char cmd[128];
-			RzFlagItem *item = rz_flag_get_i (core->flags,
-				rz_num_math (core->num, input+2));
-			if (item) {
-				rz_cons_printf ("0x%08"PFMT64x"\n", item->offset);
-				snprintf (cmd, sizeof (cmd), "pD@%"PFMT64d":%"PFMT64d,
-					 item->offset, item->size);
-				rz_core_cmd0 (core, cmd);
-			}
-		} else eprintf ("Missing arguments\n");
-		break;
-#endif
-	case 'x':
-		if (input[1] == ' ') {
-			char cmd[128];
-			RzFlagItem *item = rz_flag_get_i(core->flags,
-				rz_num_math(core->num, input + 2));
-			if (item) {
-				rz_cons_printf("0x%08" PFMT64x "\n", item->offset);
-				snprintf(cmd, sizeof(cmd), "px@%" PFMT64d ":%" PFMT64d,
-					item->offset, item->size);
-				rz_core_cmd0(core, cmd);
-			}
-		} else {
-			eprintf("Missing arguments\n");
-		}
-		break;
 	case ',': // "f,"
 		cmd_flag_table(core, input);
 		break;
@@ -1181,94 +1186,6 @@ rep:
 		default:
 			eprintf("Usage: fg[*] ([prefix])\n");
 			break;
-		}
-		break;
-	case 'c': // "fc"
-		if (input[1] == '?' || input[1] != ' ') {
-			rz_core_cmd_help(core, help_msg_fc);
-		} else {
-			RzFlagItem *fi;
-			const char *ret;
-			char *arg = rz_str_trim_dup(input + 2);
-			char *color = strchr(arg, ' ');
-			if (color && color[1]) {
-				*color++ = 0;
-			}
-			fi = rz_flag_get(core->flags, arg);
-			if (fi) {
-				ret = rz_flag_item_set_color(fi, color);
-				if (!color && ret)
-					rz_cons_println(ret);
-			} else {
-				eprintf("Unknown flag '%s'\n", arg);
-			}
-			free(arg);
-		}
-		break;
-	case 'C': // "fC"
-		if (input[1] == ' ') {
-			RzFlagItem *item;
-			char *q, *p = strdup(input + 2), *dec = NULL;
-			q = strchr(p, ' ');
-			if (q) {
-				*q = 0;
-				item = rz_flag_get(core->flags, p);
-				if (item) {
-					if (!strncmp(q + 1, "base64:", 7)) {
-						dec = (char *)rz_base64_decode_dyn(q + 8, -1);
-						if (dec) {
-							rz_flag_item_set_comment(item, dec);
-							free(dec);
-						} else {
-							eprintf("Failed to decode base64-encoded string\n");
-						}
-					} else {
-						rz_flag_item_set_comment(item, q + 1);
-					}
-				} else {
-					eprintf("Cannot find flag with name '%s'\n", p);
-				}
-			} else {
-				item = rz_flag_get_i(core->flags, rz_num_math(core->num, p));
-				if (item && item->comment) {
-					rz_cons_println(item->comment);
-				} else {
-					eprintf("Cannot find item\n");
-				}
-			}
-			free(p);
-		} else
-			eprintf("Usage: fC [name] [comment]\n");
-		break;
-	case 'o': // "fo"
-		rz_core_fortune_print_random(core);
-		break;
-	case 'O': // "fO"
-		flag_ordinals(core, input + 1);
-		break;
-	case 'r':
-		if (input[1] == ' ' && input[2]) {
-			RzFlagItem *item;
-			char *old = str + 1;
-			char *new = strchr(old, ' ');
-			if (new) {
-				*new = 0;
-				new ++;
-				item = rz_flag_get(core->flags, old);
-				if (!item && !strncmp(old, "fcn.", 4)) {
-					item = rz_flag_get(core->flags, old + 4);
-				}
-			} else {
-				new = old;
-				item = rz_flag_get_i(core->flags, core->offset);
-			}
-			if (item) {
-				if (!rz_flag_rename(core->flags, item, new)) {
-					eprintf("Invalid name\n");
-				}
-			} else {
-				eprintf("Usage: fr [[old]] [new]\n");
-			}
 		}
 		break;
 	case 'N':
@@ -1384,14 +1301,8 @@ rep:
 			free(arg);
 		}
 		break;
-	case '?':
 	default:
-		if (input[1]) {
-			core->num->value = rz_flag_get(core->flags, input + 1) ? 1 : 0;
-		} else {
-			rz_core_cmd_help(core, help_msg_f);
-			break;
-		}
+		break;
 	}
 	free(str);
 	return 0;

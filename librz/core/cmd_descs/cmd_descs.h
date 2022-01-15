@@ -450,9 +450,26 @@ RZ_IPI RzCmdStatus rz_eval_editor_handler(RzCore *core, int argc, const char **a
 RZ_IPI RzCmdStatus rz_eval_readonly_handler(RzCore *core, int argc, const char **argv);
 RZ_IPI RzCmdStatus rz_eval_spaces_handler(RzCore *core, int argc, const char **argv);
 RZ_IPI RzCmdStatus rz_eval_type_handler(RzCore *core, int argc, const char **argv);
+RZ_IPI RzCmdStatus rz_flag_add_handler(RzCore *core, int argc, const char **argv);
+RZ_IPI RzCmdStatus rz_flag_local_add_handler(RzCore *core, int argc, const char **argv);
+RZ_IPI RzCmdStatus rz_flag_remove_handler(RzCore *core, int argc, const char **argv);
+RZ_IPI RzCmdStatus rz_flag_remove_all_handler(RzCore *core, int argc, const char **argv);
+RZ_IPI RzCmdStatus rz_flag_alias_handler(RzCore *core, int argc, const char **argv);
+RZ_IPI RzCmdStatus rz_flag_base_handler(RzCore *core, int argc, const char **argv);
+RZ_IPI RzCmdStatus rz_flag_distance_handler(RzCore *core, int argc, const char **argv);
+RZ_IPI RzCmdStatus rz_flag_list_handler(RzCore *core, int argc, const char **argv, RzCmdStateOutput *state);
+RZ_IPI RzCmdStatus rz_flag_length_handler(RzCore *core, int argc, const char **argv);
+RZ_IPI RzCmdStatus rz_flag_realname_handler(RzCore *core, int argc, const char **argv);
+RZ_IPI RzCmdStatus rz_flag_realname_list_handler(RzCore *core, int argc, const char **argv, RzCmdStateOutput *state);
+RZ_IPI RzCmdStatus rz_flag_list_ascii_handler(RzCore *core, int argc, const char **argv);
+RZ_IPI RzCmdStatus rz_flag_color_handler(RzCore *core, int argc, const char **argv);
+RZ_IPI RzCmdStatus rz_flag_comment_handler(RzCore *core, int argc, const char **argv);
 RZ_IPI RzCmdStatus rz_flag_describe_handler(RzCore *core, int argc, const char **argv, RzCmdStateOutput *state);
 RZ_IPI RzCmdStatus rz_flag_describe_at_handler(RzCore *core, int argc, const char **argv, RzCmdStateOutput *state);
 RZ_IPI RzCmdStatus rz_flag_describe_closest_handler(RzCore *core, int argc, const char **argv);
+RZ_IPI RzCmdStatus rz_flag_move_handler(RzCore *core, int argc, const char **argv);
+RZ_IPI RzCmdStatus rz_flag_ordinals_handler(RzCore *core, int argc, const char **argv);
+RZ_IPI RzCmdStatus rz_flag_rename_handler(RzCore *core, int argc, const char **argv);
 RZ_IPI RzCmdStatus rz_flag_space_add_handler(RzCore *core, int argc, const char **argv);
 RZ_IPI RzCmdStatus rz_flag_space_list_handler(RzCore *core, int argc, const char **argv, RzCmdStateOutput *state);
 RZ_IPI RzCmdStatus rz_flag_space_remove_handler(RzCore *core, int argc, const char **argv);
@@ -470,6 +487,7 @@ RZ_IPI RzCmdStatus rz_flag_zone_remove_handler(RzCore *core, int argc, const cha
 RZ_IPI RzCmdStatus rz_flag_zone_remove_all_handler(RzCore *core, int argc, const char **argv);
 RZ_IPI RzCmdStatus rz_flag_zone_around_handler(RzCore *core, int argc, const char **argv);
 RZ_IPI RzCmdStatus rz_flag_zone_list_handler(RzCore *core, int argc, const char **argv, RzCmdStateOutput *state);
+RZ_IPI RzCmdStatus rz_flag_hexdump_handler(RzCore *core, int argc, const char **argv);
 RZ_IPI int rz_cmd_flag(void *data, const char *input);
 RZ_IPI RzCmdStatus rz_egg_compile_handler(RzCore *core, int argc, const char **argv);
 RZ_IPI RzCmdStatus rz_egg_config_handler(RzCore *core, int argc, const char **argv);
@@ -772,6 +790,7 @@ RZ_IPI RzCmdStatus rz_cmd_shell_sort_handler(RzCore *core, int argc, const char 
 RZ_IPI RzCmdStatus rz_cmd_shell_clear_handler(RzCore *core, int argc, const char **argv);
 RZ_IPI RzCmdStatus rz_cmd_shell_clear_handler(RzCore *core, int argc, const char **argv);
 RZ_IPI RzCmdStatus rz_cmd_shell_which_handler(RzCore *core, int argc, const char **argv);
+RZ_IPI RzCmdStatus rz_cmd_shell_fortune_handler(RzCore *core, int argc, const char **argv);
 
 // Main function that initialize the entire commands tree
 RZ_IPI void rzshell_cmddescs_init(RzCore *core);
