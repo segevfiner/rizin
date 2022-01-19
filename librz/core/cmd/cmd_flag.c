@@ -172,29 +172,29 @@ static RzList *__childrenFlagsOf(RzCore *core, RzList *flags, const char *prefix
 	return list;
 }
 
-static void __printRecursive(RzCore *core, RzList *list, const char *prefix, int mode, int depth);
+static void __printRecursive(RzCore *core, RzList *list, const char *name, RzOutputMode mode, int depth);
 
-static void __printRecursive(RzCore *core, RzList *flags, const char *prefix, int mode, int depth) {
+static void __printRecursive(RzCore *core, RzList *flags, const char *name, RzOutputMode mode, int depth) {
 	char *fn;
 	RzListIter *iter;
-	const int prefix_len = strlen(prefix);
-	// eprintf ("# fg %s\n", prefix);
-	if (mode == '*' && !*prefix) {
+	if (mode == RZ_OUTPUT_MODE_RIZIN && RZ_STR_ISEMPTY(name)) {
 		rz_cons_printf("agn root\n");
-	}
-	if (rz_flag_get(core->flags, prefix)) {
 		return;
 	}
-	RzList *children = __childrenFlagsOf(core, flags, prefix);
+	if (rz_flag_get(core->flags, name)) {
+		return;
+	}
+	RzList *children = __childrenFlagsOf(core, flags, name);
+	const int name_len = strlen(name);
 	rz_list_foreach (children, iter, fn) {
-		if (!strcmp(fn, prefix)) {
+		if (!strcmp(fn, name)) {
 			continue;
 		}
-		if (mode == '*') {
-			rz_cons_printf("agn %s %s\n", fn, fn + prefix_len);
-			rz_cons_printf("age %s %s\n", *prefix ? prefix : "root", fn);
+		if (mode == RZ_OUTPUT_MODE_RIZIN) {
+			rz_cons_printf("agn %s %s\n", fn, fn + name_len);
+			rz_cons_printf("age %s %s\n", RZ_STR_ISNOTEMPTY(name) ? name : "root", fn);
 		} else {
-			rz_cons_printf("%s %s\n", rz_str_pad(' ', prefix_len), fn + prefix_len);
+			rz_cons_printf("%s %s\n", rz_str_pad(' ', name_len), fn + name_len);
 		}
 		// rz_cons_printf (".fg %s\n", fn);
 		__printRecursive(core, flags, fn, mode, depth + 1);
@@ -202,11 +202,12 @@ static void __printRecursive(RzCore *core, RzList *flags, const char *prefix, in
 	rz_list_free(children);
 }
 
-static void __flag_graph(RzCore *core, const char *input, int mode) {
+RZ_IPI RzCmdStatus rz_flag_graph_handler(RzCore *core, int argc, const char **argv, RzCmdStateOutput *state) {
 	RzList *flags = rz_list_newf(NULL);
 	rz_flag_foreach_space(core->flags, rz_flag_space_cur(core->flags), listFlag, flags);
-	__printRecursive(core, flags, input, mode, 0);
+	__printRecursive(core, flags, argv[1], state->mode, 0);
 	rz_list_free(flags);
+	return RZ_CMD_STATUS_OK;
 }
 
 static int cmpflag(const void *_a, const void *_b) {
@@ -434,46 +435,6 @@ static int flag_to_flag(RzCore *core, const char *glob) {
 		return u.next - core->offset;
 	}
 	return 0;
-}
-
-typedef struct {
-	RzTable *t;
-} FlagTableData;
-
-static bool __tableItemCallback(RzFlagItem *flag, void *user) {
-	FlagTableData *ftd = user;
-	if (!RZ_STR_ISEMPTY(flag->name)) {
-		RzTable *t = ftd->t;
-		const char *spaceName = (flag->space && flag->space->name) ? flag->space->name : "";
-		const char *addr = sdb_fmt("0x%08" PFMT64x, flag->offset);
-		rz_table_add_row(t, addr, sdb_fmt("%" PFMT64d, flag->size), spaceName, flag->name, NULL);
-	}
-	return true;
-}
-
-static void cmd_flag_table(RzCore *core, const char *input) {
-	const char fmt = *input++;
-	const char *q = input;
-	FlagTableData ftd = { 0 };
-	RzTable *t = rz_core_table(core);
-	ftd.t = t;
-	RzTableColumnType *typeString = rz_table_type("string");
-	RzTableColumnType *typeNumber = rz_table_type("number");
-	rz_table_add_column(t, typeNumber, "addr", 0);
-	rz_table_add_column(t, typeNumber, "size", 0);
-	rz_table_add_column(t, typeString, "space", 0);
-	rz_table_add_column(t, typeString, "name", 0);
-
-	RzSpace *curSpace = rz_flag_space_cur(core->flags);
-	rz_flag_foreach_space(core->flags, curSpace, __tableItemCallback, &ftd);
-	if (rz_table_query(t, q)) {
-		char *s = (fmt == 'j')
-			? rz_table_tojson(t)
-			: rz_table_tostring(t);
-		rz_cons_printf("%s\n", s);
-		free(s);
-	}
-	rz_table_free(t);
 }
 
 RZ_IPI RzCmdStatus rz_flag_tag_add_handler(RzCore *core, int argc, const char **argv) {
@@ -911,6 +872,48 @@ RZ_IPI RzCmdStatus rz_flag_hexdump_handler(RzCore *core, int argc, const char **
 	return RZ_CMD_STATUS_OK;
 }
 
+RZ_IPI RzCmdStatus rz_flag_range_handler(RzCore *core, int argc, const char **argv, RzCmdStateOutput *state) {
+	if (argc > 1) {
+		ut64 size = rz_num_math(core->num, argv[1]);
+		rz_core_flag_range_print(core->flags, state, core->offset, core->offset + size);
+	} else {
+		rz_core_flag_range_print(core->flags, state, core->offset, core->offset + core->blocksize);
+	}
+	return RZ_CMD_STATUS_OK;
+}
+
+RZ_IPI RzCmdStatus rz_flag_local_list_handler(RzCore *core, int argc, const char **argv, RzCmdStateOutput *state) {
+	const RzList *list = rz_flag_get_list(core->flags, core->offset);
+	RzListIter *iter;
+	RzFlagItem *item;
+	rz_cmd_state_output_array_start(state);
+	rz_list_foreach (list, iter, item) {
+		switch (state->mode) {
+		case RZ_OUTPUT_MODE_RIZIN:
+			rz_cons_printf("f %s = 0x%08" PFMT64x "\n", item->name, item->offset);
+			break;
+		case RZ_OUTPUT_MODE_JSON: {
+			pj_o(state->d.pj);
+			pj_ks(state->d.pj, "name", item->name);
+			pj_ks(state->d.pj, "realname", item->realname);
+			pj_kn(state->d.pj, "offset", item->offset);
+			pj_kn(state->d.pj, "size", item->size);
+			pj_end(state->d.pj);
+		} break;
+		default:
+			rz_cons_printf("%s\n", item->name);
+			break;
+		}
+	}
+	rz_cmd_state_output_array_end(state);
+	return RZ_CMD_STATUS_OK;
+}
+
+RZ_IPI RzCmdStatus rz_flag_list_handler(RzCore *core, int argc, const char **argv, RzCmdStateOutput *state) {
+	rz_core_flag_print(core->flags, state);
+	return RZ_CMD_STATUS_OK;
+}
+
 RZ_IPI int rz_cmd_flag(void *data, const char *input) {
 	RzCore *core = (RzCore *)data;
 	ut64 off = core->offset;
@@ -923,28 +926,6 @@ RZ_IPI int rz_cmd_flag(void *data, const char *input) {
 	}
 rep:
 	switch (*input) {
-	case 'V': // visual marks
-		switch (input[1]) {
-		case '-':
-			rz_core_visual_mark_reset(core);
-			break;
-		case ' ': {
-			int n = atoi(input + 1);
-			if (n + ASCII_MAX + 1 < UT8_MAX) {
-				const char *arg = strchr(input + 2, ' ');
-				ut64 addr = arg ? rz_num_math(core->num, arg) : core->offset;
-				rz_core_visual_mark_set(core, n + ASCII_MAX + 1, addr);
-			}
-		} break;
-		case '?':
-			eprintf("Usage: fV[*-] [nkey] [offset]\n");
-			eprintf("Dump/Restore visual marks (mK/'K)\n");
-			break;
-		default:
-			rz_core_visual_mark_dump(core);
-			break;
-		}
-		break;
 	case 'R': // "fR"
 		switch (*str) {
 		case '\0':
@@ -1169,25 +1150,6 @@ rep:
 				rz_cons_printf("0x%08" PFMT64x "\n", item->size);
 		}
 		break;
-	case ',': // "f,"
-		cmd_flag_table(core, input);
-		break;
-	case 'g': // "fg"
-		switch (input[1]) {
-		case '*':
-			__flag_graph(core, rz_str_trim_head_ro(input + 2), '*');
-			break;
-		case ' ':
-			__flag_graph(core, rz_str_trim_head_ro(input + 2), ' ');
-			break;
-		case 0:
-			__flag_graph(core, rz_str_trim_head_ro(input + 1), 0);
-			break;
-		default:
-			eprintf("Usage: fg[*] ([prefix])\n");
-			break;
-		}
-		break;
 	case 'N':
 		if (!input[1]) {
 			RzFlagItem *item = rz_flag_get_i(core->flags, core->offset);
@@ -1216,90 +1178,6 @@ rep:
 			break;
 		}
 		eprintf("Usage: fN [[name]] [[realname]]\n");
-		break;
-	case '\0':
-	case 'n': // "fn" "fnj"
-	case '*': // "f*"
-	case 'j': // "fj"
-	case 'q': // "fq"
-		if (input[0]) {
-			switch (input[1]) {
-			case 'j':
-			case 'q':
-			case 'n':
-			case '*':
-				input++;
-				break;
-			}
-		}
-		if (input[0] && input[1] == '.') {
-			const int mode = input[2];
-			const RzList *list = rz_flag_get_list(core->flags, core->offset);
-			PJ *pj = NULL;
-			if (mode == 'j') {
-				pj = pj_new();
-				pj_a(pj);
-			}
-			RzListIter *iter;
-			RzFlagItem *item;
-			rz_list_foreach (list, iter, item) {
-				switch (mode) {
-				case '*':
-					rz_cons_printf("f %s = 0x%08" PFMT64x "\n", item->name, item->offset);
-					break;
-				case 'j': {
-					pj_o(pj);
-					pj_ks(pj, "name", item->name);
-					pj_ks(pj, "realname", item->realname);
-					pj_kn(pj, "offset", item->offset);
-					pj_kn(pj, "size", item->size);
-					pj_end(pj);
-				} break;
-				default:
-					rz_cons_printf("%s\n", item->name);
-					break;
-				}
-			}
-			if (mode == 'j') {
-				pj_end(pj);
-				char *s = pj_drain(pj);
-				rz_cons_printf("%s\n", s);
-				free(s);
-			}
-		} else {
-			rz_flag_list(core->flags, *input, input[0] ? input + 1 : "");
-		}
-		break;
-	case 'i': // "fi"
-		if (input[1] == ' ' || (input[1] && input[2] == ' ')) {
-			char *arg = strdup(rz_str_trim_head_ro(input + 2));
-			if (*arg) {
-				arg = strdup(rz_str_trim_head_ro(input + 2));
-				char *sp = strchr(arg, ' ');
-				if (!sp) {
-					char *newarg = rz_str_newf("%c0x%" PFMT64x " %s+0x%" PFMT64x,
-						input[1], core->offset, arg, core->offset);
-					free(arg);
-					arg = newarg;
-				} else {
-					char *newarg = rz_str_newf("%c%s", input[1], arg);
-					free(arg);
-					arg = newarg;
-				}
-			} else {
-				free(arg);
-				arg = rz_str_newf(" 0x%" PFMT64x " 0x%" PFMT64x,
-					core->offset, core->offset + core->blocksize);
-			}
-			rz_flag_list(core->flags, 'i', arg);
-			free(arg);
-		} else {
-			// XXX dupe for prev case
-			char *arg = rz_str_newf(" 0x%" PFMT64x " 0x%" PFMT64x,
-				core->offset, core->offset + core->blocksize);
-			rz_flag_list(core->flags, 'i', arg);
-			free(arg);
-		}
 		break;
 	default:
 		break;

@@ -9,12 +9,32 @@ commands:
     args:
       - name: name
         type: RZ_CMD_ARG_TYPE_STRING
-  - name: f.
-    cname: flag_local_add
-    summary: Add the local flag
-    args:
-      - name: name
+      - name: size
+        type: RZ_CMD_ARG_TYPE_NUM
+      - name: comment
         type: RZ_CMD_ARG_TYPE_STRING
+        optional: true
+  - name: f.
+    summary: Local flags (per function)
+    subcommands:
+      - name: f.
+        cname: flag_local_add
+        summary: Add the local flag
+        args:
+          - name: name
+            type: RZ_CMD_ARG_TYPE_STRING
+      - name: f.l
+        cname: flag_local_list
+        summary: Add the local flag
+        type: RZ_CMD_DESC_TYPE_ARGV_STATE
+        default_mode: RZ_OUTPUT_MODE_STANDARD
+        modes:
+          - RZ_OUTPUT_MODE_STANDARD
+          - RZ_OUTPUT_MODE_JSON
+          - RZ_OUTPUT_MODE_QUIET
+        args:
+          - name: name
+            type: RZ_CMD_ARG_TYPE_STRING
   - name: f-
     cname: flag_remove
     summary: Remove the flag
@@ -49,6 +69,33 @@ commands:
       - name: glob
         type: RZ_CMD_ARG_TYPE_STRING
         optional: true
+  - name: fg
+    cname: flag_graph
+    summary: Show the flag graph
+    type: RZ_CMD_DESC_TYPE_ARGV_STATE
+    default_mode: RZ_OUTPUT_MODE_STANDARD
+    modes:
+      - RZ_OUTPUT_MODE_STANDARD
+      - RZ_OUTPUT_MODE_RIZIN
+    args:
+      - name: name
+        type: RZ_CMD_ARG_TYPE_FLAG
+        optional: true
+  - name: fi
+    cname: flag_range
+    summary: Show the flags in the block or custom range
+    type: RZ_CMD_DESC_TYPE_ARGV_STATE
+    default_mode: RZ_OUTPUT_MODE_STANDARD
+    modes:
+      - RZ_OUTPUT_MODE_STANDARD
+      - RZ_OUTPUT_MODE_RIZIN
+      - RZ_OUTPUT_MODE_QUIET
+      - RZ_OUTPUT_MODE_JSON
+      - RZ_OUTPUT_MODE_TABLE
+    args:
+      - name: size
+        type: RZ_CMD_ARG_TYPE_RZNUM
+        optional: true
   - name: fl
     cname: flag_list
     summary: List all flags
@@ -59,6 +106,7 @@ commands:
       - RZ_OUTPUT_MODE_RIZIN
       - RZ_OUTPUT_MODE_QUIET
       - RZ_OUTPUT_MODE_JSON
+      - RZ_OUTPUT_MODE_TABLE
     args: []
   - name: fL
     cname: flag_length
