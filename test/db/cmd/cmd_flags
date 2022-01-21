@@ -237,36 +237,14 @@ EXPECT=<<EOF
 EOF
 RUN
 
-NAME=fe
-FILE=malloc://1024
-CMDS=<<EOF
-fe a
-fe a
-fe a
-fe-
-fe b
-fe b
-fe b
-f
-EOF
-EXPECT=<<EOF
-0x00000000 1 a.0
-0x00000000 1 a.1
-0x00000000 1 a.2
-0x00000000 1 b.0
-0x00000000 1 b.1
-0x00000000 1 b.2
-EOF
-RUN
-
 NAME=fd
 FILE=malloc://1024
 CMDS=<<EOF
-fe a
+f a
 fd @ 0x100
 EOF
 EXPECT=<<EOF
-a.0 + 256
+a + 256
 EOF
 RUN
 
