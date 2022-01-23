@@ -128,6 +128,7 @@ d "biceq r3, r3, 7" 0730c303
 d "blne 0x1900" 3E06001B
 d "bl 0x1900" 3e0600eb
 d "b 0x1900" 3e0600ea 0x0 (jmp (bv 32 0x1900))
+d "b 0x2900" 3e0600ea 0x1000 (jmp (bv 32 0x2900))
 d "bxeq lr" 1eff2f01
 d "bxne lr" 1eff2f11
 d "clzne r5, sl" 1a5f6f11
