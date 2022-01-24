@@ -208,6 +208,10 @@ d "uxtbeq r1, r0" 7010ef06
 d "uxtheq r0, r0" 7000ff06
 d "vstreq d0, [r0]" 000b800d
 d "blne 0x1900" 8374211b 0xff7a46ec
+ad "mov r0, 0x2a" 2a00a0e3 0x0 (set r0 (bv 32 0x2a))
+ad "movs r0, 0x2a" 2a00b0e3
+ad "mov pc, 0x2a" 2af0a0e3
+ad "movs pc, 0x2a" 2af0b0e3
 aB "addeq r1, r1, r2, lsl 2" 02118100
 a "addne r1, r1, ip" 0c108110
 aB "addne r1, r1, r0, lsl 2" 00118110

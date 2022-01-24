@@ -54,11 +54,20 @@ static const char *reg_var_name(arm_reg reg) {
 }
 
 /**
- * IL to read the given reg
+ * IL to read the given capstone reg
  */
-static RzILOpBitVector *read_reg(cs_insn *insn, arm_reg reg) {
+static RzILOpBitVector *read_reg(arm_reg reg) {
 	const char *var = reg_var_name(reg);
 	return var ? VARG(var) : NULL;
+}
+
+/**
+ * IL to write the given capstone reg
+ */
+static RzILOpEffect *write_reg(arm_reg reg, RZ_OWN RZ_NONNULL RzILOpBitVector *v) {
+	rz_return_val_if_fail(v, NULL);
+	const char *var = reg_var_name(reg);
+	return var ? SETG(var, v) : NULL;
 }
 
 /**
@@ -104,11 +113,11 @@ static RZ_NULLABLE RzILOpBool *cond(arm_cc c) {
 /**
  * IL to retrieve the value of the \p n -th arg of \p insn
  */
-static RzILOpBitVector *arg(csh *handle, cs_insn *insn, int n) {
+static RzILOpBitVector *arg(cs_insn *insn, int n) {
 	RzILOpBitVector *r;
 	switch (insn->detail->arm.operands[n].type) {
 	case ARM_OP_REG:
-		r = read_reg(insn, insn->detail->arm.operands[n].reg);
+		r = read_reg(insn->detail->arm.operands[n].reg);
 #if 0
 		if (ISSHIFTED(n)) {
 			sprintf(buf, "%u,%s,%s",
@@ -128,13 +137,46 @@ static RzILOpBitVector *arg(csh *handle, cs_insn *insn, int n) {
 	return NULL;
 }
 
-#define ARG(x) arg(handle, insn, x)
+#define ARG(x) arg(insn, x)
+
+/**
+ * zf := v == 0
+ * nf := msb v
+ */
+static RzILOpEffect *update_flags_zn(RzILOpBitVector *v) {
+	return SEQ2(
+		SETG("zf", IS_ZERO(v)),
+		SETG("nf", MSB(DUP(v))));
+}
+
+/**
+ * Capstone: ARM_INS_MOV
+ * ARM: mov, movs
+ */
+static RzILOpEffect *mov(cs_insn *insn) {
+	if (!ISREG(0) || !ISIMM(1)) {
+		return NULL;
+	}
+	RzILOpPure *val = ARG(1);
+	if (!val) {
+		return NULL;
+	}
+	RzILOpEffect *eff = write_reg(REGID(0), val);
+	if (insn->detail->arm.update_flags && eff) {
+		return SEQ2(
+			eff,
+			update_flags_zn(DUP(val)));
+	}
+	return eff;
+}
 
 static RzILOpEffect *il_unconditional(csh *handle, cs_insn *insn, bool thumb) {
 	switch (insn->id) {
 	case ARM_INS_B: {
 		RzILOpBitVector *dst = ARG(0);
 		return dst ? JMP(dst) : NULL;
+	case ARM_INS_MOV:
+		return mov(insn);
 	}
 	default:
 		return NULL;
