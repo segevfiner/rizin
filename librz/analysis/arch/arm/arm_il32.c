@@ -62,6 +62,46 @@ static RzILOpBitVector *read_reg(cs_insn *insn, arm_reg reg) {
 }
 
 /**
+ * IL for arm condition
+ * unconditional is returned as NULL (rather than true), for simpler code
+ */
+static RZ_NULLABLE RzILOpBool *cond(arm_cc c) {
+	switch (c) {
+	case ARM_CC_EQ:
+		return VARG("zf");
+	case ARM_CC_NE:
+		return INV(VARG("zf"));
+	case ARM_CC_HS:
+		return VARG("cf");
+	case ARM_CC_LO:
+		return INV(VARG("cf"));
+	case ARM_CC_MI:
+		return VARG("nf");
+	case ARM_CC_PL:
+		return INV(VARG("nf"));
+	case ARM_CC_VS:
+		return VARG("vf");
+	case ARM_CC_VC:
+		return INV(VARG("vf"));
+	case ARM_CC_HI:
+		return AND(VARG("cf"), INV(VARG("zf")));
+	case ARM_CC_LS:
+		return AND(INV(VARG("cf")), VARG("zf"));
+	case ARM_CC_GE:
+		return INV(XOR(VARG("nf"), VARG("vf")));
+	case ARM_CC_LT:
+		return XOR(VARG("nf"), VARG("vf"));
+	case ARM_CC_GT:
+		return AND(INV(VARG("zf")), INV(XOR(VARG("nf"), VARG("vf"))));
+	case ARM_CC_LE:
+		return AND(VARG("zf"), XOR(VARG("nf"), VARG("vf")));
+	case ARM_CC_AL:
+	default:
+		return NULL;
+	}
+}
+
+/**
  * IL to retrieve the value of the \p n -th arg of \p insn
  */
 static RzILOpBitVector *arg(csh *handle, cs_insn *insn, int n) {
@@ -90,7 +130,7 @@ static RzILOpBitVector *arg(csh *handle, cs_insn *insn, int n) {
 
 #define ARG(x) arg(handle, insn, x)
 
-RZ_IPI RzILOpEffect *rz_arm_cs_32_il(csh *handle, cs_insn *insn, bool thumb) {
+static RzILOpEffect *il_unconditional(csh *handle, cs_insn *insn, bool thumb) {
 	switch (insn->id) {
 	case ARM_INS_B: {
 		RzILOpBitVector *dst = ARG(0);
@@ -99,6 +139,18 @@ RZ_IPI RzILOpEffect *rz_arm_cs_32_il(csh *handle, cs_insn *insn, bool thumb) {
 	default:
 		return NULL;
 	}
+}
+
+RZ_IPI RzILOpEffect *rz_arm_cs_32_il(csh *handle, cs_insn *insn, bool thumb) {
+	RzILOpEffect *eff = il_unconditional(handle, insn, thumb);
+	if (!eff) {
+		return NULL;
+	}
+	RzILOpBool *c = cond(insn->detail->arm.cc);
+	if (c) {
+		return BRANCH(c, eff, NOP);
+	}
+	return eff;
 }
 
 #include <rz_il/rz_il_opbuilder_end.h>
