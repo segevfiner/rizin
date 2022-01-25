@@ -136,6 +136,7 @@ RZ_API RzBreakpointItem *rz_bp_get_index(RzBreakpoint *bp, int idx);
 RZ_API int rz_bp_get_index_at(RzBreakpoint *bp, ut64 addr);
 
 RZ_API RzBreakpointItem *rz_bp_get_at(RzBreakpoint *bp, ut64 addr);
+RZ_API RzBreakpointItem *rz_bp_get_ending_at(RzBreakpoint *bp, ut64 addr);
 RZ_API RzBreakpointItem *rz_bp_get_in(RzBreakpoint *bp, ut64 addr, int perm);
 
 RZ_API bool rz_bp_is_valid(RzBreakpoint *bp, RzBreakpointItem *b);

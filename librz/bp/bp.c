@@ -106,6 +106,22 @@ RZ_API RzBreakpointItem *rz_bp_get_at(RzBreakpoint *bp, ut64 addr) {
 	return NULL;
 }
 
+/**
+ * \brief Get the breakpoint b that fulfills `b->addr + b-> size == addr`
+ * After hitting a (usually software) breakpoint, the program counter will be directly after it.
+ * This way we can trace back the breakpoint matching this program counter.
+ */
+RZ_API RzBreakpointItem *rz_bp_get_ending_at(RzBreakpoint *bp, ut64 addr) {
+	RzListIter *iter;
+	RzBreakpointItem *b;
+	rz_list_foreach (bp->bps, iter, b) {
+		if (!b->hw && b->addr + b->size == addr) {
+			return b;
+		}
+	}
+	return NULL;
+}
+
 static inline bool inRange(RzBreakpointItem *b, ut64 addr) {
 	return (addr >= b->addr && addr < (b->addr + b->size));
 }
@@ -251,11 +267,15 @@ RZ_API int rz_bp_add_fault(RzBreakpoint *bp, ut64 addr, int size, int perm) {
 	return false;
 }
 
+/**
+ * \brief Add a software breakpoint
+ * \p size preferred size of the breakpoint, or 0 to determine automatically
+ */
 RZ_API RzBreakpointItem *rz_bp_add_sw(RzBreakpoint *bp, ut64 addr, int size, int perm) {
 	RzBreakpointItem *item;
 	ut8 *bytes;
 	if (size < 1) {
-		size = 1;
+		size = rz_bp_size_at(bp, addr);
 	}
 	if (!(bytes = calloc(1, size))) {
 		return NULL;
