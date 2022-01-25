@@ -4,6 +4,8 @@
 
 #include <rz_bp.h>
 
+RZ_IPI void rz_bp_item_insert(RzBreakpoint *bp, RzBreakpointItem *b);
+
 static void rz_bp_watch_add_hw(RzBreakpoint *bp, RzBreakpointItem *b) {
 	if (bp->breakpoint) {
 		bp->breakpoint(bp, b, true);
@@ -11,7 +13,6 @@ static void rz_bp_watch_add_hw(RzBreakpoint *bp, RzBreakpointItem *b) {
 }
 
 RZ_API RzBreakpointItem *rz_bp_watch_add(RzBreakpoint *bp, ut64 addr, int size, int hw, int perm) {
-	RzBreakpointItem *b;
 	if (addr == UT64_MAX || size < 1) {
 		return NULL;
 	}
@@ -19,7 +20,10 @@ RZ_API RzBreakpointItem *rz_bp_watch_add(RzBreakpoint *bp, ut64 addr, int size, 
 		eprintf("Breakpoint already set at this address.\n");
 		return NULL;
 	}
-	b = rz_bp_item_new(bp);
+	RzBreakpointItem *b = RZ_NEW0(RzBreakpointItem);
+	if (!b) {
+		return NULL;
+	}
 	b->addr = addr;
 	b->size = size;
 	b->enabled = true;
@@ -31,8 +35,7 @@ RZ_API RzBreakpointItem *rz_bp_watch_add(RzBreakpoint *bp, ut64 addr, int size, 
 		eprintf("[TODO]: Software watchpoint is not implemented yet (use ESIL)\n");
 		/* TODO */
 	}
-	bp->nbps++;
-	rz_list_append(bp->bps, b);
+	rz_bp_item_insert(bp, b);
 	return b;
 }
 
