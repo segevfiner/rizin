@@ -54,40 +54,45 @@ RZ_API RzBreakpoint *rz_bp_free(RzBreakpoint *bp) {
 	return NULL;
 }
 
-RZ_API int rz_bp_get_bytes(RzBreakpoint *bp, ut8 *buf, int len, int endian, int idx) {
-	int i;
+/**
+ * Get the bytes to place at \p addr in order to set a sw breakpoint there
+ * \p return the length of bytes or 0 on failure
+ */
+RZ_API int rz_bp_get_bytes(RzBreakpoint *bp, ut64 addr, ut8 *buf, int len, int idx) {
+	int endian = bp->endian;
+	int bits = bp->ctx.bits_at ? bp->ctx.bits_at(addr, bp->ctx.user) : 0;
 	struct rz_bp_arch_t *b;
-	if (bp->cur) {
-		// find matching size breakpoint
-	repeat:
-		for (i = 0; i < bp->cur->nbps; i++) {
-			b = &bp->cur->bps[i];
-			if (bp->cur->bps[i].bits) {
-				if (bp->bits != bp->cur->bps[i].bits) {
-					continue;
-				}
-			}
-			if (bp->cur->bps[i].length == len && bp->cur->bps[i].endian == endian) {
-				memcpy(buf, b->bytes, b->length);
-				return b->length;
-			}
-		}
-		if (len != 4) {
-			len = 4;
-			goto repeat;
-		}
-		/* if not found try to pad with the first one */
-		b = &bp->cur->bps[0];
-		if (len % b->length) {
-			eprintf("No matching bpsize\n");
-			return 0;
-		}
-		for (i = 0; i < len; i++) {
-			memcpy(buf + i, b->bytes, b->length);
-		}
-		return b->length;
+	if (!bp->cur) {
+		return 0;
 	}
-	return 0;
+	// find matching size breakpoint
+repeat:
+	for (int i = 0; i < bp->cur->nbps; i++) {
+		b = &bp->cur->bps[i];
+		if (bp->cur->bps[i].bits) {
+			if (!bits || bits != bp->cur->bps[i].bits) {
+				continue;
+			}
+		}
+		if (bp->cur->bps[i].length == len && bp->cur->bps[i].endian == endian) {
+			memcpy(buf, b->bytes, b->length);
+			return b->length;
+		}
+	}
+	if (len != 4) {
+		len = 4;
+		goto repeat;
+	}
+	/* if not found try to pad with the first one */
+	b = &bp->cur->bps[0];
+	if (len % b->length) {
+		eprintf("No matching bpsize\n");
+		return 0;
+	}
+	for (int i = 0; i < len; i++) {
+		memcpy(buf + i, b->bytes, b->length);
+	}
+	return b->length;
 }
 
 RZ_API RzBreakpointItem *rz_bp_get_at(RzBreakpoint *bp, ut64 addr) {
@@ -171,7 +176,7 @@ static RzBreakpointItem *rz_bp_add(RzBreakpoint *bp, const ut8 *obytes, ut64 add
 	if (!b) {
 		return NULL;
 	}
-	b->addr = addr + bp->delta;
+	b->addr = addr;
 	if (bp->baddr > addr) {
 		eprintf("base addr should not be larger than the breakpoint address.\n");
 	}
@@ -200,7 +205,7 @@ static RzBreakpointItem *rz_bp_add(RzBreakpoint *bp, const ut8 *obytes, ut64 add
 		} else {
 			b->obytes = NULL;
 		}
-		ret = rz_bp_get_bytes(bp, b->bbytes, size, bp->endian, 0);
+		ret = rz_bp_get_bytes(bp, b->addr, b->bbytes, size, 0);
 		if (ret != size) {
 			eprintf("Cannot get breakpoint bytes. No architecture selected?\n");
 		}
@@ -331,7 +336,7 @@ RZ_API int rz_bp_del_index(RzBreakpoint *bp, int idx) {
 	return false;
 }
 
-RZ_API int rz_bp_size(RzBreakpoint *bp) {
+RZ_API int rz_bp_size(RzBreakpoint *bp, int bits) {
 	RzBreakpointArch *bpa;
 	int i, bpsize = 8;
 	if (!bp || !bp->cur) {
@@ -339,7 +344,7 @@ RZ_API int rz_bp_size(RzBreakpoint *bp) {
 	}
 	for (i = 0; bp->cur->bps[i].bytes; i++) {
 		bpa = &bp->cur->bps[i];
-		if (bpa->bits && bpa->bits != bp->bits) {
+		if (bpa->bits && bpa->bits != bits) {
 			continue;
 		}
 		if (bpa->length < bpsize) {
@@ -347,6 +352,11 @@ RZ_API int rz_bp_size(RzBreakpoint *bp) {
 		}
 	}
 	return bpsize;
+}
+
+RZ_API int rz_bp_size_at(RzBreakpoint *bp, ut64 addr) {
+	int bits = bp->ctx.bits_at ? bp->ctx.bits_at(addr, bp->ctx.user) : 0;
+	return rz_bp_size(bp, bits);
 }
 
 // Check if the breakpoint is in a valid map

@@ -39,9 +39,8 @@ RZ_API int rz_bp_plugin_add(RzBreakpoint *bp, RzBreakpointPlugin *foo) {
 	return true;
 }
 
-RZ_API int rz_bp_use(RzBreakpoint *bp, const char *name, int bits) {
+RZ_API int rz_bp_use(RzBreakpoint *bp, const char *name) {
 	RzListIter *iter;
-	bp->bits = bits;
 	RzBreakpointPlugin *h;
 	rz_list_foreach (bp->plugins, iter, h) {
 		if (!strcmp(h->name, name)) {
