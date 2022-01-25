@@ -352,7 +352,7 @@ void free_tracenodes_kv(HtUPKv *kv) {
 	free(kv->value);
 }
 
-RZ_API RzDebug *rz_debug_new(int hard) {
+RZ_API RzDebug *rz_debug_new(RZ_BORROW RZ_NONNULL RzBreakpointContext *bp_ctx) {
 	RzDebug *dbg = RZ_NEW0(RzDebug);
 	if (!dbg) {
 		return NULL;
@@ -395,12 +395,10 @@ RZ_API RzDebug *rz_debug_new(int hard) {
 	dbg->main_arena_resolved = false;
 	dbg->glibc_version = 231; /* default version ubuntu 20 */
 	rz_debug_signal_init(dbg);
-	if (hard) {
-		dbg->bp = rz_bp_new();
-		rz_debug_plugin_init(dbg);
-		dbg->bp->iob.init = false;
-		dbg->bp->baddr = 0;
-	}
+	dbg->bp = rz_bp_new(bp_ctx);
+	rz_debug_plugin_init(dbg);
+	dbg->bp->iob.init = false;
+	dbg->bp->baddr = 0;
 	return dbg;
 }
 

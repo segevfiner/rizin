@@ -19,13 +19,14 @@ static void rz_bp_item_free(RzBreakpointItem *b) {
 	free(b);
 }
 
-RZ_API RzBreakpoint *rz_bp_new(void) {
+RZ_API RzBreakpoint *rz_bp_new(RZ_BORROW RZ_NONNULL RzBreakpointContext *ctx) {
 	int i;
 	RzBreakpointPlugin *static_plugin;
 	RzBreakpoint *bp = RZ_NEW0(RzBreakpoint);
 	if (!bp) {
 		return NULL;
 	}
+	bp->ctx = *ctx;
 	bp->bps_idx_count = 16;
 	bp->bps_idx = RZ_NEWS0(RzBreakpointItem *, bp->bps_idx_count);
 	bp->stepcont = RZ_BP_CONT_NORMAL;
@@ -353,8 +354,10 @@ RZ_API bool rz_bp_is_valid(RzBreakpoint *bp, RzBreakpointItem *b) {
 	if (!bp->bpinmaps) {
 		return true;
 	}
-
-	return bp->corebind.isMapped(bp->corebind.core, b->addr, b->perm);
+	if (!bp->ctx.is_mapped) {
+		return false;
+	}
+	return bp->ctx.is_mapped(b->addr, b->perm, bp->ctx.user);
 }
 
 /**
